@@ -8,12 +8,14 @@ SRC := $(wildcard *.c)
 OBJ := ${SRC:c=o}
 TARGETS := ficor.out
 
-.PHONY: clean all release debug install uninstall
 
 all: debug
 
 clean:
 	rm *.out *.o
+
+install:
+	cp -f ficor.out /usr/local/bin/ficor
 
 debug: CFLAGS := ${DEBUG_FLAGS}
 debug: ${TARGETS}
@@ -27,8 +29,8 @@ ${TARGETS}: ${OBJ}
 %.o: %.c
 	${CC} ${CFLAGS} $< -c -o $@
 
-intall:
-	cp ficor.out /usr/local/bin/ficor
 
-uinstall:
-	rm /usr/local/ficor
+uninstall:
+	rm -f /usr/local/ficor
+
+.PHONY: clean all release debug install

@@ -18,6 +18,8 @@ static char* flag_set_info = NULL;
 static char* flag_set_tag  = NULL;
 static char* flag_include  = NULL;
 static char* flag_exclude  = NULL;
+static bool  flag_info     = 0;
+static char* ficor_file = ".ficor";
 
 static flag_t flags[] = {
     {
@@ -74,6 +76,20 @@ static flag_t flags[] = {
         .long_identifier  = "exclude",
         .description      = "exclude flags with given tags from output",
         .target           = &flag_exclude,
+        .type             = FLAG_STR,
+    },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "info",
+        .description      = "print info to output",
+        .target           = &flag_info,
+        .type             = FLAG_BOOL,
+    },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "config",
+        .description      = "use given file as config",
+        .target           = &ficor_file,
         .type             = FLAG_STR,
     },
 };
@@ -159,7 +175,6 @@ struct ficor_t {
 static ficor_t* ficor    = NULL;
 static uint32_t ficor_sz = 0;
 
-static char*    ficor_file = ".ficor";
 
 static void load_ficor(void)
 {
@@ -462,7 +477,11 @@ static void list(void)
         if (exclude && !is_tag_disjunct(f->tag, f->tag_sz, exclude, include_sz)) {
             continue;
         }
-        printf("%s\n", f->file);
+        printf("%s", f->file);
+        if (flag_info && f->info) {
+            printf(" %s", f->info);
+        }
+        putc('\n', stdout);
     }
 
     free(include);
