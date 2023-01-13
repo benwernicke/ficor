@@ -2,13 +2,13 @@ CC := gcc
 DEBUG_FLAGS    := -Wall -pedantic -g -fsanitize=leak -fsanitize=undefined -fsanitize=address
 RELEASE_FLAGS  := -march=native -mtune=native -O3 -flto
 
-a.out := main.o
+ficor.out := main.o flag.o
 
 SRC := $(wildcard *.c)
 OBJ := ${SRC:c=o}
-TARGETS := a.out
+TARGETS := ficor.out
 
-.PHONY: clean all release debug
+.PHONY: clean all release debug install uninstall
 
 all: debug
 
@@ -26,3 +26,9 @@ ${TARGETS}: ${OBJ}
 	
 %.o: %.c
 	${CC} ${CFLAGS} $< -c -o $@
+
+intall:
+	cp ficor.out /usr/local/bin/ficor
+
+uinstall:
+	rm /usr/local/ficor
