@@ -8,6 +8,78 @@
 
 static const uint64_t SIGNATURE = 0xF1C0F1C0F1C0F1C0UL;
 
+// flag stuff
+
+static bool  flag_help     = 0;
+static bool  flag_init     = 0;
+static bool  flag_dump     = 0;
+static char* flag_add_file = NULL;
+static char* flag_set_info = NULL;
+static char* flag_set_tag  = NULL;
+static char* flag_include  = NULL;
+static char* flag_exclude  = NULL;
+
+static flag_t flags[] = {
+    {
+        .short_identifier = 'h',
+        .long_identifier  = "help",
+        .description      = "show this page and exit",
+        .target           = &flag_help,
+        .type             = FLAG_BOOL,
+    },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "init",
+        .description      = "init current working directory as ficor directory",
+        .target           = &flag_init,
+        .type             = FLAG_BOOL,
+    },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "dump",
+        .description      = "dump all decorators",
+        .target           = &flag_dump,
+        .type             = FLAG_BOOL,
+    },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "add-file",
+        .description      = "add a file to decor: '--add-file <filename> [-t <tags>] [-set-info <info>]'",
+        .target           = &flag_add_file,
+        .type             = FLAG_STR,
+    },
+    {
+        .short_identifier = 't',
+        .long_identifier  = "set-tag",
+        .description      = "set tag. Used by --add-file, --edit-file, --add-tag",
+        .target           = &flag_set_tag,
+        .type             = FLAG_STR,
+    },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "set-info",
+        .description      = "set info. Used by --add-file, --edit-file --add-info",
+        .target           = &flag_set_info,
+        .type             = FLAG_STR,
+    },
+    {
+        .short_identifier = 'i',
+        .long_identifier  = "include",
+        .description      = "only include flags with given tags in output",
+        .target           = &flag_include,
+        .type             = FLAG_STR,
+    },
+    {
+        .short_identifier = 'e',
+        .long_identifier  = "exclude",
+        .description      = "exclude flags with given tags from output",
+        .target           = &flag_exclude,
+        .type             = FLAG_STR,
+    },
+};
+
+static const uint32_t flags_len = sizeof(flags) / sizeof(*flags);
+
 // ficor file spec
 //                 8: signature
 //                 4: ficor_sz
@@ -16,9 +88,9 @@ static const uint64_t SIGNATURE = 0xF1C0F1C0F1C0F1C0UL;
 //         ficor.file_sz: ficor.file
 //                     4: ficor.info_sz
 //         ficor.info_sz: ficor.info
-//                     4: ficor.flag_buf_sz
-//      ficorflag_buf_sz: ficor.flag_buf
-//                     4: ficor.flag_sz
+//                     4: ficor.tag_buf_sz
+//      ficortag_buf_sz: ficor.tag_buf
+//                     4: ficor.tag_sz
 
 typedef enum {
     ERR_OK = 0,
@@ -65,16 +137,23 @@ void format_error(void)
         }                                   \
     } while (0)
 
+#define ERR_FORWARD(...)                \
+    do {                                    \
+        if (error != ERR_OK) {              \
+            goto error;                     \
+        }                                   \
+    } while (0)
+
 typedef struct ficor_t ficor_t;
 struct ficor_t {
     char*    info;
     char*    file;
-    char*    flag_buf;
-    char**   flag;
-    uint16_t file_sz;
-    uint16_t flag_buf_sz;
-    uint16_t flag_sz;
-    uint16_t info_sz;
+    char*    tag_buf;
+    char**   tag;
+    uint32_t file_sz;
+    uint32_t tag_buf_sz;
+    uint32_t tag_sz;
+    uint32_t info_sz;
 };
 
 static ficor_t* ficor    = NULL;
@@ -115,30 +194,31 @@ static void load_ficor(void)
             ficor[i].info = NULL;
         }
 
-        if (ficor[i].flag_buf_sz) {
+        fread(&ficor[i].tag_buf_sz, 1, sizeof(ficor[i].tag_buf_sz), f);
+        if (ficor[i].tag_buf_sz) {
 
-            ficor[i].flag_buf = malloc(ficor[i].flag_buf_sz);
-            ERR_IF(!ficor[i].flag_buf_sz, ERR_BAD_MALLOC);
-            fread(&ficor[i].flag_buf_sz, 1, sizeof(ficor[i].flag_buf_sz), f);
+            ficor[i].tag_buf = malloc(ficor[i].tag_buf_sz);
+            ERR_IF(!ficor[i].tag_buf_sz, ERR_BAD_MALLOC);
+            fread(ficor[i].tag_buf, 1, ficor[i].tag_buf_sz, f);
 
-            fread(&ficor[i].flag_sz, 1, sizeof(ficor[i].flag_sz), f);
+            fread(&ficor[i].tag_sz, 1, sizeof(ficor[i].tag_sz), f);
 
-            ficor[i].flag = malloc(ficor[i].flag_sz * sizeof(*ficor[i].flag));
-            ERR_IF(!ficor[i].flag, ERR_BAD_MALLOC);
+            ficor[i].tag = malloc(ficor[i].tag_sz * sizeof(*ficor[i].tag));
+            ERR_IF(!ficor[i].tag, ERR_BAD_MALLOC);
 
-            // parse flags
+            // parse tags
             {
-                char* s = ficor[i].flag_buf;
+                char* s = ficor[i].tag_buf;
                 uint32_t j = 0;
-                for (; j < ficor[i].flag_buf_sz; ++j, ++s) {
-                    ficor[i].flag[j] = s;
+                for (; j < ficor[i].tag_sz; ++j, ++s) {
+                    ficor[i].tag[j] = s;
                     for (; *s; ++s) {  }
                 }
             }
         } else {
-            ficor[i].flag_buf = NULL;
-            ficor[i].flag     = NULL;
-            ficor[i].flag_sz  = 0;
+            ficor[i].tag_buf = NULL;
+            ficor[i].tag     = NULL;
+            ficor[i].tag_sz  = 0;
         }
     }
 
@@ -173,12 +253,12 @@ void unload_ficor(void)
             free(i->info);
         }
 
-        fwrite(&i->flag_buf_sz, 1, sizeof(i->flag_buf_sz), f);
-        if (i->flag_buf_sz) {
-            fwrite(i->flag_buf, 1, i->flag_buf_sz, f);
-            free(i->flag_buf);
-            fwrite(&i->flag_sz, 1, sizeof(i->flag_sz), f);
-            free(i->flag);
+        fwrite(&i->tag_buf_sz, 1, sizeof(i->tag_buf_sz), f);
+        if (i->tag_buf_sz) {
+            fwrite(i->tag_buf, 1, i->tag_buf_sz, f);
+            free(i->tag_buf);
+            fwrite(&i->tag_sz, 1, sizeof(i->tag_sz), f);
+            free(i->tag);
         }
     }
 
@@ -194,26 +274,7 @@ error:
     return;
 }
 
-static bool flag_help = 0;
-static bool flag_init = 0;
 
-static flag_t flags[] = {
-    {
-        .short_identifier = 'h',
-        .long_identifier  = "help",
-        .description      = "show this page and exit",
-        .target           = &flag_help,
-        .type             = FLAG_BOOL,
-    },
-    {
-        .short_identifier = 0,
-        .long_identifier  = "init",
-        .description      = "init current working directory as ficor directory",
-        .target           = &flag_init,
-        .type             = FLAG_BOOL,
-    }
-};
-static const uint32_t flags_len = sizeof(flags) / sizeof(*flags);
 
 void init(void)
 {
@@ -221,7 +282,7 @@ void init(void)
     ERR_IF_MSG(!f, ERR_FILE, "could not open file '%s': %s", ficor_file, strerror(errno));
 
     fwrite(&SIGNATURE, 1, sizeof(SIGNATURE), f);
-    uint16_t zero = 0;
+    uint32_t zero = 0;
     fwrite(&zero, 1, sizeof(zero), f);
 
     fclose(f);
@@ -229,6 +290,190 @@ void init(void)
 
 error:
     if (f) fclose(f);
+    return;
+}
+
+void dump(void)
+{
+    ficor_t*       f = ficor;
+    ficor_t* const e = ficor + ficor_sz;
+    for (; f != e; ++f) {
+        printf("Name:\n\t%s\nInfo:\n", f->file);
+        if (f->info) {
+            printf("\t%s\n", f->info);
+        }
+        printf("Tags:\n");
+
+        char** t = f->tag;
+        char** const te = f->tag + f->tag_sz;
+        for (; t != te; ++t) {
+            printf("\t%s\n", *t);
+        }
+        putc('\n', stdout);
+    }
+}
+
+void add_file(void)
+{
+    ficor_t* f = &ficor[ficor_sz++];
+
+    f->file_sz = strlen(flag_add_file) + 1;
+    f->file = malloc(f->file_sz);
+    ERR_IF(!f->file, ERR_BAD_MALLOC);
+    strcpy(f->file, flag_add_file);
+
+    if (flag_set_tag) {
+        f->tag_buf_sz = strlen(flag_set_tag) + 1;
+        f->tag_buf    = malloc(f->tag_buf_sz);
+        ERR_IF(!f->tag_buf, ERR_BAD_MALLOC);
+        strcpy(f->tag_buf, flag_set_tag);
+
+        f->tag_sz = 1;
+        char* s = f->tag_buf;
+        for (; *s; ++s) {
+            if (*s == ':') {
+                *s++ = 0;
+                f->tag_sz += 1;
+            }
+        }
+
+        s = f->tag_buf;
+        f->tag = malloc(f->tag_sz * sizeof(*f->tag));
+        ERR_IF(!f->tag, ERR_BAD_MALLOC);
+
+        char** t = f->tag;
+        char** const te = f->tag + f->tag_sz;
+
+        for (; t != te; ++t, ++s) {
+            *t = s;
+            for (; *s; ++s) {  }
+        }
+
+    } else {
+        f->tag_buf_sz = 0;
+    }
+
+    if (flag_set_info) {
+        f->info_sz = strlen(flag_set_info) + 1;
+        f->info    = malloc(f->info_sz);
+        strcpy(f->info, flag_set_info);
+    } else {
+        f->info_sz = 0;
+    }
+    
+error:
+    return;
+}
+
+static char** find_tag(char** buf, uint32_t sz, char* tag)
+{
+    char** iter = buf;
+    char** end  = buf + sz;
+    for (; iter != end; ++iter) {
+        if (strcmp(*iter, tag) == 0) {
+            return iter;
+        }
+    }
+    return NULL;
+}
+
+static bool is_tag_disjunct(char** a, uint32_t a_sz, char** b, uint32_t b_sz)
+{
+    char** iter = b;
+    char** end  = b + b_sz;
+    for (; iter != end; ++iter) {
+        if (find_tag(a, a_sz, *iter)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static bool is_tag_subset(char** a, uint32_t a_sz, char** b, uint32_t b_sz)
+{
+    char** iter = b;
+    char** end  = b + b_sz;
+    for (; iter != end; ++iter) {
+        if (!find_tag(a, a_sz, *iter)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static void list(void)
+{
+    char**   include    = NULL;
+    uint32_t include_sz = 0;
+    char**   exclude    = NULL;
+    uint32_t exclude_sz = 0;
+
+    if (flag_include) {
+        include_sz = 1;    
+        char* s = flag_include;
+        for (; *s; ++s) {
+            if (*s == ':') {
+                *s++ = 0;
+                include_sz += 1;
+            }
+        }
+
+        include = malloc(include_sz * sizeof(*include));
+        ERR_IF(!include, ERR_BAD_MALLOC);
+
+        char** t  = include;
+        char** te = include + include_sz;
+        s = flag_include;
+        for (; t != te; ++t) {
+            *t = s;
+            for (; *s; ++s) {  }
+        }
+    }
+
+    if (flag_exclude) {
+        exclude_sz = 1;
+        char* s = flag_exclude;
+        for (; *s; ++s) {
+            if (*s == ':') {
+                *s++ = 0;
+                exclude_sz += 1;
+            }
+        }
+
+        exclude = malloc(exclude_sz * sizeof(*exclude));
+        ERR_IF(!exclude, ERR_BAD_MALLOC);
+
+        char** t  = exclude;
+        char** te = exclude + exclude_sz;
+        s = flag_exclude;
+        for (; t != te; ++t, ++s) {
+            *t = s;
+            for (; *s; ++s) {  }
+        }
+    }
+
+    ficor_t* f = ficor;
+    ficor_t* fe = ficor + ficor_sz;
+
+    for (; f != fe; ++f) {
+        if (include && !is_tag_subset(f->tag, f->tag_sz, include, include_sz)) {
+            continue;
+        }
+        if (exclude && !is_tag_disjunct(f->tag, f->tag_sz, exclude, include_sz)) {
+            continue;
+        }
+        printf("%s\n", f->file);
+    }
+
+    free(include);
+    free(exclude);
+
+    return;
+
+error:
+    free(include);
+    free(exclude);
+
     return;
 }
 
@@ -254,8 +499,21 @@ int main(int argc, char** argv)
     load_ficor();
     ERR_FORWARD_MSG("could not load file additional output above");
 
+    if (flag_add_file) {
+        add_file();
+        ERR_FORWARD();
+    } else {
+        list();
+    }
+
+    if (flag_dump) {
+        dump();
+    }
+
     unload_ficor();
     ERR_FORWARD_MSG("could not unload file additional output above");
+
+    return 0;
 
 error:
     return 1;
