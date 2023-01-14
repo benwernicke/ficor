@@ -478,7 +478,7 @@ static void list(void)
         char** t  = include;
         char** te = include + include_sz;
         s = flag_include;
-        for (; t != te; ++t) {
+        for (; t != te; ++t, ++s) {
             *t = s;
             for (; *s; ++s) {  }
         }
