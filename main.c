@@ -19,7 +19,8 @@ static char* flag_set_tag  = NULL;
 static char* flag_include  = NULL;
 static char* flag_exclude  = NULL;
 static bool  flag_info     = 0;
-static char* ficor_file = ".ficor";
+static char* ficor_file    = ".ficor";
+static char* flag_rm_file  = NULL;
 
 static flag_t flags[] = {
     {
@@ -92,6 +93,13 @@ static flag_t flags[] = {
         .target           = &ficor_file,
         .type             = FLAG_STR,
     },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "rm-file",
+        .description      = "remove the given file from ficor",
+        .target           = &flag_rm_file,
+        .type             = FLAG_STR,
+    },
 };
 
 static const uint32_t flags_len = sizeof(flags) / sizeof(*flags);
@@ -113,6 +121,7 @@ typedef enum {
     ERR_BAD_MALLOC,
     ERR_FILE,
     ERR_FLAG,
+    ERR_GENERAL,
 } err_t;
 
 static err_t error = ERR_OK;
@@ -289,7 +298,29 @@ error:
     return;
 }
 
+void rm_file(void)
+{
+    ficor_t* f = ficor;
+    ficor_t* fe = ficor + ficor_sz;
+    for (; f != fe; ++f) {
+        if (strcmp(f->file, flag_rm_file) == 0) {
+            break;
+        }
+    }
+    ERR_IF_MSG(f == fe, ERR_GENERAL, "could not remove %s: no such file in ficor", flag_rm_file);
 
+    free(f->file);
+    free(f->info);
+    free(f->tag_buf);
+    free(f->tag);
+
+    memmove(f, f + 1, (fe - f - 1) * sizeof(*f));
+    ficor_sz -= 1;
+
+    return;
+error:
+    return;
+}
 
 void init(void)
 {
@@ -520,6 +551,9 @@ int main(int argc, char** argv)
 
     if (flag_add_file) {
         add_file();
+        ERR_FORWARD();
+    } else if (flag_rm_file) {
+        rm_file();
         ERR_FORWARD();
     } else {
         list();
