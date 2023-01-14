@@ -21,6 +21,7 @@ static char* flag_exclude  = NULL;
 static bool  flag_info     = 0;
 static char* ficor_file    = ".ficor";
 static char* flag_rm_file  = NULL;
+static bool  flag_tags     = 0;
 
 static flag_t flags[] = {
     {
@@ -99,6 +100,13 @@ static flag_t flags[] = {
         .description      = "remove the given file from ficor",
         .target           = &flag_rm_file,
         .type             = FLAG_STR,
+    },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "tags",
+        .description      = "print tags to output",
+        .target           = &flag_tags,
+        .type             = FLAG_BOOL,
     },
 };
 
@@ -511,6 +519,14 @@ static void list(void)
         printf("%s", f->file);
         if (flag_info && f->info) {
             printf(" %s", f->info);
+        }
+        if (flag_tags && f->tag) {
+            char** t  = f->tag;
+            char** te = f->tag + f->tag_sz;
+            printf(" %s", *t++);
+            for (; t != te; ++t) {
+                printf(":%s", *t);
+            }
         }
         putc('\n', stdout);
     }
