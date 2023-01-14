@@ -23,6 +23,7 @@ static char* ficor_file    = ".ficor";
 static char* flag_rm_file  = NULL;
 static bool  flag_tags     = 0;
 static char* flag_rm_tag   = NULL;
+static char* flag_add_tag  = NULL;
 
 static flag_t flags[] = {
     {
@@ -114,6 +115,13 @@ static flag_t flags[] = {
         .long_identifier  = "rm-tag",
         .description      = "print tags to output",
         .target           = &flag_rm_tag,
+        .type             = FLAG_STR,
+    },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "add-tag",
+        .description      = "add tag to given file: requires -t / --set-tag",
+        .target           = &flag_add_tag,
         .type             = FLAG_STR,
     },
 };
@@ -312,6 +320,35 @@ void unload_ficor(void)
 
 error:
     if (f) fclose(f);
+    return;
+}
+
+static void add_tag(void)
+{
+    ERR_IF_MSG(!flag_set_tag, ERR_GENERAL, "--add-flag requires -t / --set-tag");
+    ficor_t* f = ficor;
+    ficor_t* fe = ficor + ficor_sz;
+
+    for (; f != fe; ++f) {
+        if (strcmp(f->file, flag_add_tag) == 0) {
+            break;
+        }
+    }
+    ERR_IF_MSG(f == fe, ERR_GENERAL, "%s not found", flag_add_tag);
+
+    uint32_t sz = strlen(flag_set_tag) + 1;
+    f->tag_buf  = realloc(f->tag_buf, sz + f->tag_buf_sz);
+    f->tag      = realloc(f->tag, (f->tag_sz + 1) * sizeof(*f->tag));
+    ERR_IF(!f->tag || !f->tag_buf, ERR_BAD_MALLOC);
+
+    memcpy(f->tag_buf, flag_set_tag, sz);
+
+    f->tag[f->tag_sz++] = &f->tag_buf[f->tag_buf_sz];
+    f->tag_buf_sz       += sz;
+
+    return;
+
+error:
     return;
 }
 
@@ -628,6 +665,9 @@ int main(int argc, char** argv)
         ERR_FORWARD();
     } else if (flag_rm_tag) {
         rm_tag();
+        ERR_FORWARD();
+    } else if (flag_add_tag) {
+        add_tag();
         ERR_FORWARD();
     } else {
         list();
