@@ -22,6 +22,7 @@ static bool  flag_info     = 0;
 static char* ficor_file    = ".ficor";
 static char* flag_rm_file  = NULL;
 static bool  flag_tags     = 0;
+static char* flag_rm_tag   = NULL;
 
 static flag_t flags[] = {
     {
@@ -108,6 +109,13 @@ static flag_t flags[] = {
         .target           = &flag_tags,
         .type             = FLAG_BOOL,
     },
+    {
+        .short_identifier = 0,
+        .long_identifier  = "rm-tag",
+        .description      = "print tags to output",
+        .target           = &flag_rm_tag,
+        .type             = FLAG_STR,
+    },
 };
 
 static const uint32_t flags_len = sizeof(flags) / sizeof(*flags);
@@ -192,6 +200,7 @@ struct ficor_t {
 static ficor_t* ficor    = NULL;
 static uint32_t ficor_sz = 0;
 
+static char** find_tag(char** buf, uint32_t sz, char* tag);
 
 static void load_ficor(void)
 {
@@ -306,7 +315,87 @@ error:
     return;
 }
 
-void rm_file(void)
+static void tag_array(char*** tag_array, uint32_t* tag_sz, char* buf)
+{
+    char* s = buf;
+    *tag_sz = 1;
+    for (; *s; ++s) {
+        if (*s == ':') {
+            *s++ = 0;
+            *tag_sz += 1;
+        }
+    }
+
+    *tag_array = malloc(*tag_sz * sizeof(**tag_array));
+    ERR_IF(!*tag_array, ERR_BAD_MALLOC);
+
+    char** t  = *tag_array;
+    char** te = *tag_array + *tag_sz;
+    s = buf;
+    for (; t != te; ++t, ++s) {
+        *t = s;
+        for (; *s; ++s) {  }
+    }
+error:
+    return;
+}
+
+static void rm_tag(void)
+{
+    ERR_IF_MSG(!flag_set_tag, ERR_GENERAL, "--rm-tag requires -t to work");
+    uint32_t tag_sz = 0;
+    char**   tag    = NULL;
+    tag_array(&tag, &tag_sz, flag_set_tag);
+    ERR_FORWARD();
+
+    ficor_t* f = ficor;
+    // find according ficor
+    {
+        ficor_t* fe = ficor + ficor_sz;
+        for (; f != fe; ++f) {
+            if (strcmp(f->file, flag_rm_tag) == 0) {
+                break;
+            }
+        }
+        ERR_IF_MSG(f == fe, ERR_GENERAL, "could not find decorator for file: %s", flag_rm_tag);
+    }
+
+    // using remove_if implementation
+    char*  new_tag_buf = malloc(f->tag_buf_sz);
+    char** new_tag   = malloc(f->tag_sz * sizeof(*new_tag));
+    ERR_IF(!new_tag || !new_tag_buf, ERR_BAD_MALLOC);
+
+    char*  tb = new_tag_buf;
+    char** tn = new_tag;
+    char** t  = f->tag;
+    char** te = f->tag + f->tag_sz;
+
+    for (; t != te; ++t) {
+        if (!find_tag(tag, tag_sz, *t)) {
+            *tn++ = *t;
+            uint32_t l = strlen(*t) + 1;
+            memcpy(tb, *t, l);
+            tb += l;
+        }
+    }
+
+    free(f->tag_buf);
+    free(f->tag);
+
+    f->tag_buf    = new_tag_buf;
+    f->tag_buf_sz = tb - new_tag_buf;
+    f->tag        = new_tag;
+    f->tag_sz      = tn - new_tag;
+    
+    free(tag);
+    return;
+
+error:
+    free(tag);
+    return;
+}
+
+static void rm_file(void)
 {
     ficor_t* f = ficor;
     ficor_t* fe = ficor + ficor_sz;
@@ -463,47 +552,13 @@ static void list(void)
     uint32_t exclude_sz = 0;
 
     if (flag_include) {
-        include_sz = 1;    
-        char* s = flag_include;
-        for (; *s; ++s) {
-            if (*s == ':') {
-                *s++ = 0;
-                include_sz += 1;
-            }
-        }
-
-        include = malloc(include_sz * sizeof(*include));
-        ERR_IF(!include, ERR_BAD_MALLOC);
-
-        char** t  = include;
-        char** te = include + include_sz;
-        s = flag_include;
-        for (; t != te; ++t, ++s) {
-            *t = s;
-            for (; *s; ++s) {  }
-        }
+        tag_array(&include, &include_sz, flag_include);
+        ERR_FORWARD();
     }
 
     if (flag_exclude) {
-        exclude_sz = 1;
-        char* s = flag_exclude;
-        for (; *s; ++s) {
-            if (*s == ':') {
-                *s++ = 0;
-                exclude_sz += 1;
-            }
-        }
-
-        exclude = malloc(exclude_sz * sizeof(*exclude));
-        ERR_IF(!exclude, ERR_BAD_MALLOC);
-
-        char** t  = exclude;
-        char** te = exclude + exclude_sz;
-        s = flag_exclude;
-        for (; t != te; ++t, ++s) {
-            *t = s;
-            for (; *s; ++s) {  }
-        }
+        tag_array(&exclude, &exclude_sz, flag_exclude);
+        ERR_FORWARD();
     }
 
     ficor_t* f = ficor;
@@ -570,6 +625,9 @@ int main(int argc, char** argv)
         ERR_FORWARD();
     } else if (flag_rm_file) {
         rm_file();
+        ERR_FORWARD();
+    } else if (flag_rm_tag) {
+        rm_tag();
         ERR_FORWARD();
     } else {
         list();
