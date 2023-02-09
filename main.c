@@ -195,14 +195,14 @@ void format_error(void)
 
 typedef struct ficor_t ficor_t;
 struct ficor_t {
-    char*    info;
-    char*    file;
-    char*    tag_buf;
-    char**   tag;
-    uint32_t file_sz;
-    uint32_t tag_buf_sz;
-    uint32_t tag_sz;
-    uint32_t info_sz;
+    char*  info;
+    char*  file;
+    char*  tag_buf;
+    char** tag;
+    uint32_t  file_sz;
+    uint32_t  tag_buf_sz;
+    uint32_t  tag_sz;
+    uint32_t  info_sz;
 };
 
 static ficor_t* ficor    = NULL;
